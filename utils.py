@@ -218,8 +218,9 @@ def create_sparse_eye_tensor(shape):
     shape = torch.Size(shape)
     return torch.sparse.FloatTensor(indices, values, shape)
 
+
 def load_citationANEmat_gac(dataset_str="BlogCatalog", semi_rate=0.1):
-    data_file = 'data/{}/{}'.format(dataset_str, dataset_str) + '.mat'
+    data_file = 'data/{}/{}'.format('social', dataset_str) + '.mat'
     data = scio.loadmat(data_file)
     if dataset_str == 'ACM':
         features = data['Features']
@@ -234,9 +235,9 @@ def load_citationANEmat_gac(dataset_str="BlogCatalog", semi_rate=0.1):
     if label_min != 0:
         labels = labels - 1
 
-    train_idx_file = 'data/' + dataset_str + '/' + dataset_str + '_train_{}'.format(semi_rate) + '.pickle'
-    valid_idx_file = 'data/' + dataset_str + '/' + dataset_str + '_valid_{}'.format(semi_rate) + '.pickle'
-    test_idx_file = 'data/' + dataset_str + '/' + dataset_str + '_test_{}'.format(semi_rate) + '.pickle'
+    train_idx_file = 'data/' + 'social' + '/' + dataset_str + '_train_{}'.format(semi_rate) + '.pickle'
+    valid_idx_file = 'data/' + 'social' + '/' + dataset_str + '_valid_{}'.format(semi_rate) + '.pickle'
+    test_idx_file = 'data/' + 'social' + '/' + dataset_str + '_test_{}'.format(semi_rate) + '.pickle'
     if os.path.isfile(train_idx_file):
         with open(test_idx_file, 'rb') as f:
             idx_test = pickle.load(f)
@@ -284,10 +285,10 @@ def load_citationANEmat_gac(dataset_str="BlogCatalog", semi_rate=0.1):
     return adj, features, labels, idx_train, idx_val, idx_test
 
 def load_webANEmat_gac(dataset_str="texas", semi=1, semi_rate=0.1):
-    data_file = 'data/{}/{}'.format(dataset_str, dataset_str) + '.mat'
-    file_train = 'data/{}/{}_train'.format(dataset_str, dataset_str) + '.pickle'
-    file_valid = 'data/{}/{}_valid'.format(dataset_str, dataset_str) + '.pickle'
-    file_test = 'data/{}/{}_test'.format(dataset_str, dataset_str) + '.pickle'
+    data_file = 'data/{}/{}'.format('web', dataset_str) + '.mat'
+    file_train = 'data/{}/{}_train'.format('web', dataset_str) + '.pickle'
+    file_valid = 'data/{}/{}_valid'.format('web', dataset_str) + '.pickle'
+    file_test = 'data/{}/{}_test'.format('web', dataset_str) + '.pickle'
     data = scio.loadmat(data_file)
     features = data['Attributes']
     labels = data['Label'].reshape(-1)
@@ -310,9 +311,9 @@ def load_webANEmat_gac(dataset_str="texas", semi=1, semi_rate=0.1):
     with open(file_train, 'rb') as f:
         idx_train = pickle.load(f)
     if semi == 1:
-        train_idx_file = 'data/' + dataset_str + '/' + dataset_str + '_train_{}'.format(semi_rate) + '.pickle'
-        valid_idx_file = 'data/' + dataset_str + '/' + dataset_str + '_valid_{}'.format(semi_rate) + '.pickle'
-        test_idx_file = 'data/' + dataset_str + '/' + dataset_str + '_test_{}'.format(semi_rate) + '.pickle'
+        train_idx_file = 'data/' + 'web' + '/' + dataset_str + '_train_{}'.format(semi_rate) + '.pickle'
+        valid_idx_file = 'data/' + 'web' + '/' + dataset_str + '_valid_{}'.format(semi_rate) + '.pickle'
+        test_idx_file = 'data/' + 'web' + '/' + dataset_str + '_test_{}'.format(semi_rate) + '.pickle'
         if os.path.isfile(train_idx_file):
             with open(test_idx_file, 'rb') as f:
                 idx_test = pickle.load(f)
