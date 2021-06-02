@@ -1,1 +1,2 @@
-This file is used to store trained models.
+
+The weight file to store the trained models for testing. 
