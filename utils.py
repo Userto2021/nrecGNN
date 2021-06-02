@@ -106,45 +106,6 @@ def load_citation_gac(dataset_str="cora", semi=1):
 
         features = row_normalize(features)
 
-    elif dataset_str == 'nell.0.001':
-        # Find relation nodes, add them as zero-vecs into the right position
-        test_idx_range_full = range(allx.shape[0], len(graph))
-        isolated_node_idx = np.setdiff1d(test_idx_range_full, test_idx_reorder)
-        tx_extended = sp.lil_matrix((len(test_idx_range_full), x.shape[1]))
-        tx_extended[test_idx_range - allx.shape[0], :] = tx
-        tx = tx_extended
-        ty_extended = np.zeros((len(test_idx_range_full), y.shape[1]))
-        ty_extended[test_idx_range - allx.shape[0], :] = ty
-        ty = ty_extended
-
-        features = sp.vstack((allx, tx)).tolil()
-        features[test_idx_reorder, :] = features[test_idx_range, :]
-
-        idx_all = np.setdiff1d(range(len(graph)), isolated_node_idx)
-
-        if not os.path.isfile("data/{}.features.npz".format(dataset_str)):
-            print("Creating feature vectors for relations - this might take a while...")
-            features_extended = sp.hstack((features, sp.lil_matrix((features.shape[0], len(isolated_node_idx)))),
-                                          dtype=np.int32).todense()
-            features_extended[isolated_node_idx, features.shape[1]:] = np.eye(len(isolated_node_idx))
-            features = sp.csr_matrix(features_extended)
-            print("Done!")
-            save_sparse_csr("data/{}.features".format(dataset_str), features)
-        else:
-            features = load_sparse_csr("data/{}.features.npz".format(dataset_str))
-        adj = nx.adjacency_matrix(nx.from_dict_of_lists(graph))
-        adj = adj + adj.T.multiply(adj.T > adj) - adj.multiply(adj.T > adj)
-        # adj = adj.astype(float)
-        features = features.astype(float)
-        labels = np.vstack((ally, ty))
-        labels[test_idx_reorder, :] = labels[test_idx_range, :]
-
-        idx_test = test_idx_range.tolist()
-        idx_train = range(len(y))
-        idx_val = range(len(y), len(y) + 500)
-
-        features = row_normalize(features)
-
     else:
         features = sp.vstack((allx, tx)).tolil()
         features[test_idx_reorder, :] = features[test_idx_range, :]
@@ -359,6 +320,38 @@ def load_webANEmat_gac(dataset_str="texas", semi=1, semi_rate=0.1):
     labels = torch.LongTensor(labels)
 
     return adj, features, labels, idx_train, idx_val, idx_test
+
+def sparse_to_tuple(sparse_mx):
+    if not sp.isspmatrix_coo(sparse_mx):
+        sparse_mx = sparse_mx.tocoo()
+    coords = np.vstack((sparse_mx.row, sparse_mx.col)).transpose()
+    values = sparse_mx.data
+    shape = sparse_mx.shape
+    return coords, values, shape
+
+
+def mask_adj_with_ratio(adj, ratio):
+    adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
+    adj.eliminate_zeros()
+    # Check that diag is zero:
+    assert np.diag(adj.todense()).sum() == 0
+
+    adj_triu = sp.triu(adj)
+    adj_tuple = sparse_to_tuple(adj_triu)
+    edges = adj_tuple[0]
+    random_index = np.arange(0, edges.shape[0], 1)
+    np.random.shuffle(random_index)
+    if ratio == 0.0:
+        train_edges = edges
+    else:
+        mask_num = int(edges.shape[0] * ratio)
+        pre_index = random_index[0:-mask_num]
+        train_edges = edges[pre_index]
+
+    data = np.ones(train_edges.shape[0])
+    adj_train = sp.csr_matrix((data, (train_edges[:, 0], train_edges[:, 1])), shape=adj.shape)
+    adj_train = adj_train + adj_train.T
+    return adj_train
 
 def sys_normalized_adjacency(adj):
    adj = sp.coo_matrix(adj)

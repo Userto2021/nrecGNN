@@ -11,12 +11,14 @@ import torch.optim as optim
 from normalization import row_normalize
 from utils import sparse_mx_to_torch_sparse_tensor, accuracy, load_webANEmat_gac, load_citation_gac, load_citationANEmat_gac
 from models import nrecGNN
+import os
+import pickle
 
 # Training settings
 parser = argparse.ArgumentParser()
 parser.add_argument('--cuda', type=str, default='6', help='specify cuda devices')
 parser.add_argument('--model_type', type=str, default='nrecgnn')
-parser.add_argument('--dataset', type=str, default="texas",
+parser.add_argument('--dataset', type=str, default="citeseer",
                     help='squirrel.')
 parser.add_argument('--seed', type=int, default=42, help='Random seed.')
 parser.add_argument('--epochs', type=int, default=200,
@@ -36,6 +38,8 @@ parser.add_argument('--nlayer', type=int, default=2,
                     help='Number of layers')
 parser.add_argument('--act', type=str, default='relu', help='activation function relu|prelu')
 parser.add_argument('--dropnode', type=float, default=.2,
+                    help='Dropout rate (1 - keep probability).')
+parser.add_argument('--drop_edge', type=float, default=.6,
                     help='Dropout rate (1 - keep probability).')
 
 
@@ -60,6 +64,7 @@ def train(features, adj, labels, idx_train, idx_val, idx_test, args, save_path, 
                 share_attn=args.share_attn,
                 nclass=labels.max().item() + 1,
                 dropnode=args.dropnode,
+                drop_edge=args.drop_edge,
                      )
     optimizer = optim.Adam(model.parameters(),
                            lr=args.lr, weight_decay=args.weight_decay)
@@ -124,23 +129,47 @@ def train(features, adj, labels, idx_train, idx_val, idx_test, args, save_path, 
           )
     return acc_test, f1_mic_test, f1_mac_test
 
-def get_hops(adj, n_hops):
+# def get_hops(adj, n_hops):
+#     # adj is csr_matrix, n_hops
+#     n_node, _ = adj.shape
+#     adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape, dtype=float)
+#     adj_orig = adj
+#     adj_result = []
+#     for i in range(n_hops):
+#         if i == 0:
+#             adj_ = adj_orig.tocoo()
+#         else:
+#             adj = sp.csr_matrix(adj.dot(adj_orig.toarray().T))
+#             adj_ = adj
+#         print('---> Sparse rate of %d is : %.4f' % (i + 1, adj_.nnz / n_node / n_node))
+#         adj_ = row_normalize(adj_)
+#         adj_result.append(adj_)
+#     return adj_result
+def get_hops(adj, n_hops, args):
     # adj is csr_matrix, n_hops
-    n_node, _ = adj.shape
-    adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape, dtype=float)
-    adj_orig = adj
-    adj_result = []
-    for i in range(n_hops):
-        if i == 0:
-            adj_ = adj_orig.tocoo()
-        else:
-            adj = sp.csr_matrix(adj.dot(adj_orig.toarray().T))
-            adj_ = adj
-        print('---> Sparse rate of %d is : %.4f' % (i + 1, adj_.nnz / n_node / n_node))
-        adj_ = row_normalize(adj_)
-        adj_result.append(adj_)
-    return adj_result
+    hop_file = 'hop_adj/' + args.dataset + '_hop_{}'.format(args.nlayer) + '.pickle'
 
+    if os.path.isfile(hop_file):
+        with open(hop_file, 'rb') as f:
+            adj_result = pickle.load(f)
+    else:
+        n_node, _ = adj.shape
+        adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape, dtype=float)
+        adj_orig = adj
+        adj_result = []
+        for i in range(n_hops):
+            if i == 0:
+                adj_ = adj_orig.tocoo()
+            else:
+                adj = sp.csr_matrix(adj.dot(adj_orig.toarray().T))
+                adj_ = adj
+            print('---> Sparse rate of %d is : %.4f' % (i + 1, adj_.nnz / n_node / n_node))
+            adj_ = row_normalize(adj_)
+            adj_result.append(adj_)
+
+        with open(hop_file, 'wb') as pfile:
+            pickle.dump(adj_result, pfile, pickle.HIGHEST_PROTOCOL)
+    return adj_result
 
 def adj_return(adj, idx, device):
     # adj is csr_matrix, n_hops
@@ -162,7 +191,8 @@ def main(features, adj, labels, idx_train, idx_val, idx_test, args, device):
     for t in range(args.times):
         print('----> Start run %s %d / %d times' % (args.model_type, t, args.times))
         save_path = "./weights/%s-" % args.model_type + args.dataset + '-%s_' % args.act \
-                    + '%d_' % args.hidden_state + '%d' % args.nlayer + '_%d' % args.share_attn + '_{}'.format(args.dropnode) + '%d' % t + '.pth'
+                    + '%d_' % args.hidden_state + '%d' % args.nlayer + '_%d' % args.share_attn\
+                    + '_{}'.format(args.dropnode) + '_{}_'.format(args.drop_edge) + '%d' % t + '.pth'
         t1 = time.time()
         acc_test, f1_mic_test, f1_mac_test = train(features, adj, labels, idx_train, idx_val, idx_test, args, save_path, device)
         t2 = time.time()
@@ -198,17 +228,17 @@ if __name__ == '__main__':
         print("--> No GPU")
     print_configuration(args)
 
-
     # Load data
     print('---> Start Loading Dataset...')
     if args.dataset == 'BlogCatalog' or args.dataset == 'Flickr':
         adj, features, labels, idx_train, idx_val, idx_test = load_citationANEmat_gac(args.dataset, args.semi_rate)
-    elif args.dataset == 'texas' or args.dataset == 'wisconsin' or args.dataset == 'film' or args.dataset == 'squirrel':
+    elif args.dataset == 'texas' or args.dataset == 'wisconsin' or args.dataset == 'chameleon' or args.dataset == 'cornell' or args.dataset == 'film' or args.dataset == 'squirrel':
         adj, features, labels, idx_train, idx_val, idx_test = load_webANEmat_gac(args.dataset, args.semi, args.semi_rate)
     else:
         adj, features, labels, idx_train, idx_val, idx_test = load_citation_gac(args.dataset, args.semi)
 
-    adj_norm = get_hops(adj, args.nlayer)
+    # adj_norm = get_hops(adj, args.nlayer)
+    adj_norm = get_hops(adj, args.nlayer, args)
 
     print('---> Start Training...')
     main(features, adj_norm, labels, idx_train, idx_val, idx_test, args, device)
